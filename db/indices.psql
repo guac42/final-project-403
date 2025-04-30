@@ -1,0 +1,5 @@
+CREATE EXTENSION pg_trgm;
+SET pg_trgm.similarity_threshold = 0.8;
+
+CREATE INDEX titles_gin ON titles USING GIN(primaryTitle gin_trgm_ops);
+CREATE INDEX people_gin ON people USING GIN(primaryName gin_trgm_ops);

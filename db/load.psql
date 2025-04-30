@@ -1,0 +1,218 @@
+DROP TABLE IF EXISTS titles_staging;
+CREATE TABLE titles_staging (
+    tconst VARCHAR(12) UNIQUE NOT NULL,
+    titleType TEXT NOT NULL,
+    primaryTitle TEXT NOT NULL,
+    originalTitle TEXT NOT NULL,
+    isAdult BOOLEAN,
+    startYear INTEGER,
+    endYear INTEGER,
+    runtimeMinutes INTEGER,
+    genres TEXT
+);
+\COPY titles_staging(tconst, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, genres) FROM 'db/data/title.basics.tsv' WITH HEADER;
+
+DROP TABLE IF EXISTS principals_staging;
+CREATE TABLE principals_staging (
+    tconst VARCHAR(12) NOT NULL,
+    ordering INTEGER NOT NULL,
+    nconst VARCHAR(12) NOT NULL,
+    category TEXT NOT NULL,
+    job TEXT,
+    characters TEXT,
+    UNIQUE (tconst, ordering, nconst)
+);
+\COPY principals_staging(tconst, ordering, nconst, category, job, characters) FROM 'db/data/title.principals.tsv' WITH HEADER;
+
+DROP TABLE IF EXISTS ratings_staging;
+CREATE TABLE ratings_staging (
+    tconst VARCHAR(12) UNIQUE NOT NULL,
+    averageRating NUMERIC NOT NULL,
+    numVotes INTEGER NOT NULL
+);
+\COPY ratings_staging(tconst, averageRating, numVotes) FROM 'db/data/title.ratings.tsv' WITH HEADER;
+
+DROP TABLE IF EXISTS episodes_staging;
+CREATE TABLE episodes_staging (
+    tconst VARCHAR(12) NOT NULL,
+    parentTconst VARCHAR(12) NOT NULL,
+    seasonNumber INTEGER,
+    episodeNumber INTEGER,
+    UNIQUE (tconst, parentTconst)
+);
+\COPY episodes_staging(tconst, parentTconst, seasonNumber, episodeNumber) FROM 'db/data/title.episode.tsv' WITH HEADER;
+
+DROP TABLE IF EXISTS crew_staging;
+CREATE TABLE crew_staging (
+    tconst VARCHAR(12) UNIQUE NOT NULL,
+    directors TEXT,
+    writers TEXT
+);
+\COPY crew_staging(tconst, directors, writers) FROM 'db/data/title.crew.tsv' WITH HEADER;
+
+DROP TABLE IF EXISTS people_staging;
+CREATE TABLE people_staging (
+    nconst VARCHAR(12) UNIQUE NOT NULL,     -- staging id
+    primaryName TEXT,
+    birthYear INTEGER,
+    deathYear INTEGER,
+    primaryProfessions TEXT,
+    knownForTitles TEXT                     -- staging value
+);
+\COPY people_staging(nconst, primaryName, birthYear, deathYear, primaryProfession, knownForTitles) FROM 'db/data/name.basics.tsv' WITH HEADER;
+
+-- Start from an empty database
+DROP TABLE IF EXISTS principals;
+DROP TYPE IF EXISTS principal_category;
+DROP TABLE IF EXISTS episodes;
+DROP TABLE IF EXISTS known_for;
+DROP TABLE IF EXISTS crew;
+DROP TABLE IF EXISTS people;
+DROP TABLE IF EXISTS titles;
+
+-- Create people table
+CREATE TABLE people (
+    personId INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    nconst VARCHAR(12) UNIQUE NOT NULL,     -- staging id
+    primaryName TEXT,
+    birthYear INTEGER,
+    deathYear INTEGER,
+    primaryProfessions TEXT[],
+    knownForTitles TEXT                     -- staging value
+);
+INSERT INTO people (nconst, primaryName, birthYear, deathYear, primaryProfessions, knownForTitles)
+
+-- Create titles table
+CREATE TABLE titles (
+    titleId INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    tconst VARCHAR(12) UNIQUE NOT NULL,     -- staging id
+    titleType TEXT NOT NULL,
+    primaryTitle TEXT NOT NULL,
+    originalTitle TEXT NOT NULL,
+    isAdult BOOLEAN NOT NULL,
+    startYear INTEGER,
+    endYear INTEGER,
+    runtimeMinutes INTEGER,
+    genres TEXT[],
+    averageRating NUMERIC,
+    numVotes INTEGER
+);
+INSERT INTO titles (tconst, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, genres, averageRating, numVotes)
+    SELECT
+        tconst,
+        titleType,
+        primaryTitle,
+        originalTitle,
+        isAdult,
+        startYear,
+        endYear,
+        runtimeMinutes,
+        string_to_array(genres, ',') as genres,
+        averageRating,
+        numVotes
+    FROM
+        titles_staging
+        JOIN ratings_staging USING (tconst);
+DROP TABLE titles_staging;
+DROP TABLE ratings_staging;
+
+-- Create title episode table
+CREATE TABLE episodes (
+    titleId INTEGER PRIMARY KEY REFERENCES titles,
+    parentId INTEGER REFERENCES titles (titleId),
+    seasonNumber INTEGER,
+    episodeNumber INTEGER
+);
+INSERT INTO episodes (titleId, parentId, seasonNumber, episodeNumber)
+    SELECT
+        titleId,
+        (SELECT titleId FROM titles WHERE tconst = e.parentTconst) AS parentId,
+        seasonNumber,
+        episodeNumber
+    FROM episodes_staging AS e
+        JOIN titles USING (tconst);
+DROP TABLE episodes_staging;
+
+-- Create known for table
+CREATE TABLE known_for (
+    personId INTEGER REFERENCES people,
+    titleId INTEGER REFERENCES titles,
+    PRIMARY KEY (personId, titleId)
+);
+INSERT INTO known_for (personId, titleId)
+    SELECT
+        personId,
+        titleId
+    FROM
+        people, string_to_table(knownForTitles, ',') tconst
+        JOIN titles USING (tconst);
+ALTER TABLE people DROP COLUMN knownForTitles;
+
+-- Create principals table
+CREATE TYPE principal_category AS ENUM(
+    'director',
+    'writer',
+    'self',
+    'actor',
+    'actress',
+    'producer',
+    'editor',
+    'casting_director',
+    'composer',
+    'production_designer',
+    'cinematographer',
+    'archive_footage',
+    'archive_sound'
+);
+CREATE TABLE principals (
+    titleId INTEGER REFERENCES titles,
+    personId INTEGER REFERENCES people,
+    category principal_category,
+    job TEXT,
+    "characters" TEXT[],
+    PRIMARY KEY (titleId, personId, category)
+);
+INSERT INTO principals AS p (titleId, personId, category, job, "characters")
+    SELECT DISTINCT
+        titleId,
+        personId,
+        category::principal_category,
+        job,
+        string_to_array(
+            string_agg(
+                trim(BOTH '[]"' FROM "characters"),
+                '","'),
+            '","') AS "characters"
+    FROM
+        principals_staging
+        JOIN titles USING (tconst)
+        JOIN people USING (nconst)
+    GROUP BY titleId, personID, category, job;
+DROP TABLE principals_staging;
+
+CREATE TABLE crew (
+    titleId INTEGER REFERENCES titles,
+    personId INTEGER REFERENCES people,
+    "role" TEXT,
+    PRIMARY KEY (titleId, personId, "role")
+);
+INSERT INTO crew (titleId, personId, "role")
+    SELECT
+        titleId,
+        personId,
+        'director'
+    FROM
+        crew_staging JOIN titles USING (tconst),
+        string_to_table(directors, ',') nconst JOIN people USING (nconst)
+    UNION
+    SELECT
+        titleId,
+        personId,
+        'writer'
+    FROM
+        crew_staging JOIN titles USING (tconst),
+        string_to_table(writers, ',') nconst JOIN people USING (nconst);
+DROP TABLE crew_staging;
+
+ALTER TABLE titles DROP COLUMN tconst;
+ALTER TABLE people DROP COLUMN nconst;
