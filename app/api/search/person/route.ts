@@ -6,9 +6,12 @@ export async function GET(req: NextRequest) {
 
     const result = await query(
         `
-        SELECT *, similarity(primaryName, $1) AS similarity
+        SELECT people.*, array_agg(primaryTitle) AS known_for, similarity(primaryName, $1) AS similarity
         FROM people
+            JOIN known_for USING (personId)
+            JOIN titles USING (titleId)
         WHERE primaryName % $1
+        GROUP BY personId
         ORDER BY similarity DESC
         LIMIT 100
     `,

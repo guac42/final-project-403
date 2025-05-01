@@ -3,12 +3,16 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Person } from "@/app/lib/types";
+import {Person} from "@/app/lib/types";
+
+type Result = {
+    known_for: string[]
+} & Person;
 
 export default function TitleSearchPage() {
     const searchParams = useSearchParams();
     const query = searchParams.get('q') || '';
-    const [people, setPeople] = useState<(Person&{ similarity: number })[]>([]);
+    const [people, setPeople] = useState<Result[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -40,13 +44,8 @@ export default function TitleSearchPage() {
                     return (
                         <Link key={person.personid} href={`/person/${person.personid}`} className="bg-card p-4 shadow-md rounded transition transform hover:scale-105 hover:shadow-lg">
                             <h2 className="text-xl font-semibold text-card-foreground">{person.primaryname}</h2>
-                            <h3 className="text-md text-muted-foreground mb-2 capitalize">{person.primaryprofession?.split(",").map((profession) => profession.split("_").join(" ")).join(" | ")}</h3>
-                            {/*<div className="flex items-center gap-2">
-                                {person.isadult && (<Badge key="destructive" variant="destructive" className="rounded-full">Adult</Badge>)}
-                                {person.genres?.filter((genre) => !person.isadult || genre !== "Adult").map((genre) => (
-                                    <Badge key={genre} variant="outline" className="rounded-full">{genre}</Badge>
-                                ))}
-                            </div>*/}
+                            <h3 className="text-md text-muted-foreground capitalize">{person.primaryprofessions?.map((profession) => profession.split("_").join(" ")).join(" | ")}</h3>
+                            <p className="text-sm font-medium text-muted-foreground">{person.known_for.join(", ")}</p>
                         </Link>
                     )
                 })}

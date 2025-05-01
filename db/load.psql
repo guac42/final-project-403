@@ -59,7 +59,7 @@ CREATE TABLE people_staging (
     primaryProfessions TEXT,
     knownForTitles TEXT                     -- staging value
 );
-\COPY people_staging(nconst, primaryName, birthYear, deathYear, primaryProfession, knownForTitles) FROM 'db/data/name.basics.tsv' WITH HEADER;
+\COPY people_staging(nconst, primaryName, birthYear, deathYear, primaryProfessions, knownForTitles) FROM 'db/data/name.basics.tsv' WITH HEADER;
 
 -- Start from an empty database
 DROP TABLE IF EXISTS principals;
@@ -81,6 +81,16 @@ CREATE TABLE people (
     knownForTitles TEXT                     -- staging value
 );
 INSERT INTO people (nconst, primaryName, birthYear, deathYear, primaryProfessions, knownForTitles)
+    SELECT
+        nconst,
+        primaryName,
+        birthYear,
+        deathYear,
+        string_to_array(primaryProfessions, ','),
+        knownForTitles
+    FROM
+        people_staging;
+DROP TABLE people_staging;
 
 -- Create titles table
 CREATE TABLE titles (

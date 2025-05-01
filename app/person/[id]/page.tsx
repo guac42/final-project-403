@@ -47,7 +47,7 @@ export default async function PersonPage({ params }: Props) {
     return (
         <div className="max-w-2xl mx-auto p-6">
             <h1 className="text-4xl font-bold mb-4">{person.primaryname}</h1>
-            <p className="text-accent-foreground mb-2 capitalize">{person.primaryprofession?.split(",").map((profession) => profession.split("_").join(" ")).join(" | ")}</p>
+            <p className="text-accent-foreground mb-2 capitalize">{person.primaryprofessions?.map((profession) => profession.split("_").join(" ")).join(" | ")}</p>
             {person.birthyear && (<p className="text-accent-foreground mb-2">Born in {person.birthyear}</p>)}
             {person.deathyear && (<p className="text-accent-foreground mb-2">Died in {person.deathyear}</p>)}
 

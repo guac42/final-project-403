@@ -30,7 +30,7 @@ export interface Person {
     primaryname: string;
     birthyear?: number;
     deathyear?: number;
-    primaryprofession: string;
+    primaryprofessions: string[];
 }
 
 export function typeToString(type: TitleType) {

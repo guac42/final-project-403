@@ -6,15 +6,20 @@ import Link from 'next/link';
 import { Title, TitleType, typeToString } from "@/app/lib/types";
 import { Badge } from "@/components/ui/badge";
 
+type Result = {
+    stars: string[];
+} & Title;
+
 export default function TitleSearchPage() {
     const searchParams = useSearchParams();
     const query = searchParams.get('q') || '';
-    const [titles, setTitles] = useState<(Title&{ similarity: number })[]>([]);
+    const [titles, setTitles] = useState<Result[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (!query) return;
         const fetchMovies = async () => {
+            setTitles([]);
             setLoading(true);
             const res = await fetch(`/api/search/title?q=${encodeURIComponent(query)}`);
             const data = await res.json();
@@ -50,12 +55,13 @@ export default function TitleSearchPage() {
                         <Link key={title.titleid} href={`/title/${title.titleid}`} className="bg-card p-4 shadow-md rounded transition transform hover:scale-105 hover:shadow-lg">
                             <h2 className="text-xl font-semibold text-card-foreground">{title.primarytitle}</h2>
                             <h3 className="text-md text-muted-foreground mb-2">{info.join(" | ")}</h3>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 mb-2">
                                 {title.isadult && (<Badge key="destructive" variant="destructive" className="rounded-full">Adult</Badge>)}
                                 {title.genres?.filter((genre) => !title.isadult || genre !== "Adult").map((genre) => (
                                     <Badge key={genre} variant="outline" className="rounded-full">{genre}</Badge>
                                 ))}
                             </div>
+                            <p className="text-sm font-medium text-muted-foreground">{title.stars.join(", ")}</p>
                         </Link>
                     )
                 })}
